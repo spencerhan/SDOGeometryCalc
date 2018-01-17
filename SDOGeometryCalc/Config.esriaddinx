@@ -1,0 +1,22 @@
+﻿<ESRI.Configuration xmlns="http://schemas.esri.com/Desktop/AddIns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Name>SDOGeometryCalc</Name>
+  <AddInID>{0e73b234-6aef-4aac-b8fe-4e99750d47ee}</AddInID>
+  <Description>Type in a description for this Add-in.</Description>
+  <Version>1.0</Version>
+  <Image>Images\SDOGeometryCalc.png</Image>
+  <Author>SpencerH</Author>
+  <Company></Company>
+  <Date>15/01/2018</Date>
+  <Targets>
+    <Target name="Desktop" version="10.4" />
+  </Targets>
+  <AddIn language="CLR" library="SDOGeometryCalc.dll" namespace="SDOGeometryCalc">
+    <ArcMap>
+      <Commands>
+        <Button id="SDOGeometryCalc_SDOGeomCalc" class="SDOGeomCalc" message="Add-in created by SpencerHan to calculate geometry stored in SDO_GEOMETRY in Oracle" caption="CalculateGeom" tip="Add-in command tooltip. (Place holder for Tooltip)" category="Add-In Controls" image="Images\SDOGeomCalc.png">
+          <Help heading="Help file placeholder">Help file content placeholder</Help>
+        </Button>
+      </Commands>
+    </ArcMap>
+  </AddIn>
+</ESRI.Configuration>
