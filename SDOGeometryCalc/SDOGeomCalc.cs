@@ -9,6 +9,8 @@ using System.Windows.Forms;
 using ESRI.ArcGIS.Geometry;
 using ESRI.ArcGIS.esriSystem;
 using ESRI.ArcGIS.Editor;
+using ESRI.ArcGIS.Display;
+using ESRI.ArcGIS.Framework;
 
 namespace SDOGeometryCalc {
     public class SDOGeomCalc : ESRI.ArcGIS.Desktop.AddIns.Button {
@@ -22,12 +24,13 @@ namespace SDOGeometryCalc {
             //
             ArcMap.Application.CurrentTool = null;
             IMxDocument pMxDoc = (IMxDocument)ArcMap.Application.Document;
+            IActiveView aView = pMxDoc.ActiveView;
             IMap pMapWin = pMxDoc.FocusMap;
             ILayer iLayer = pMxDoc.SelectedLayer;
             UID editorUID = new UID();
             editorUID.Value = "esriEditor.Editor";
             IEditor3 editor = (IEditor3)ArcMap.Application.FindExtensionByCLSID(editorUID);
-            Boolean editSession = (editor.EditState == esriEditState.esriStateEditing);
+            bool editSession = (editor.EditState == esriEditState.esriStateEditing);
             if (!editSession) {
                 #region getting active layer
                 try {
@@ -35,22 +38,20 @@ namespace SDOGeometryCalc {
                     IFeatureClass iFclass = iGeoFLayer.FeatureClass;
                     //MessageBox.Show(iFclass.AliasName, "DataSource", MessageBoxButtons.OK);
                     string dbName = string.Concat(iFclass.AliasName.TakeWhile((c) => c != '.')); // reference: https://stackoverflow.com/questions/1857513/get-substring-everything-before-certain-char
-                    string layerName = iFclass.AliasName.Replace(dbName, "");
+                    string layerName = iFclass.AliasName.Replace(dbName + ".", "");
                     string colName;
                     string sdoFunc;
                     esriGeometryType fGeom = iFclass.ShapeType;
                     if (fGeom == esriGeometryType.esriGeometryLine || fGeom == esriGeometryType.esriGeometryPolyline) {
                         colName = "SHAPE_LENGTH";
                         sdoFunc = "SDO_LENGTH";
-                        return;
                     } else if (fGeom == esriGeometryType.esriGeometryPolygon) {
                         colName = "SHAPE_AREA";
                         sdoFunc = "SDO_AREA";
-                        return;
                     } else {
                         throw new Exception("Not a supported geometry type.");
                     }
-                    this.getOracleGeometry(dbName, colName, sdoFunc, layerName, iGeoFLayer);
+                    this.getOracleGeometry(dbName, colName, sdoFunc, layerName, iGeoFLayer, aView);
                 } catch (Exception ex) {
                     MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK);
                 }
@@ -59,7 +60,25 @@ namespace SDOGeometryCalc {
             } else {
                 #region normal labeling
                 IGeoFeatureLayer iGeoFLayer = this.featureTest(iLayer);
-                this.geometryAnnotation(iGeoFLayer);
+                if (iGeoFLayer != null) {
+                    esriGeometryType fGeom = iGeoFLayer.FeatureClass.ShapeType;
+                    if (iGeoFLayer.DisplayAnnotation) {
+                        if (fGeom == esriGeometryType.esriGeometryLine || fGeom == esriGeometryType.esriGeometryPolyline) {
+                            this.labeling(iGeoFLayer, "[GEOMETRY.LEN]", 0, 1000000, false, false, aView);
+                        } else {
+                            this.labeling(iGeoFLayer, "[GEOMETRY.AREA]", 0, 1000000, false, false, aView);
+                        }
+                    } else {
+                        if (fGeom == esriGeometryType.esriGeometryLine || fGeom == esriGeometryType.esriGeometryPolyline) {
+                            this.labeling(iGeoFLayer, "[GEOMETRY.LEN]", 0, 1000000, true, true, aView);
+                        } else {
+                            this.labeling(iGeoFLayer, "[GEOMETRY.AREA]", 0, 1000000, true, true, aView);
+                        }
+                    }
+                } else {
+                    throw new Exception("Feature class is empty (null).");
+                }
+
                 #endregion
             }
 
@@ -77,26 +96,7 @@ namespace SDOGeometryCalc {
             }
         }
 
-        protected void geometryAnnotation(IGeoFeatureLayer _iGeoFLayer) {
-            esriGeometryType _fGeom = _iGeoFLayer.FeatureClass.ShapeType;
-            if (_iGeoFLayer.DisplayAnnotation) {
-                if (_fGeom == esriGeometryType.esriGeometryLine || _fGeom == esriGeometryType.esriGeometryPolyline) {
-                    _iGeoFLayer.DisplayField = "GEOMETRY.LEN";
-                } else {
-                    _iGeoFLayer.DisplayField = "GEOMETRY.AREA";
-                }
-            } else {
-                if (_fGeom == esriGeometryType.esriGeometryLine || _fGeom == esriGeometryType.esriGeometryPolyline) {
-                    _iGeoFLayer.DisplayField = "GEOMETRY.LEN";
-                } else {
-                    _iGeoFLayer.DisplayField = "GEOMETRY.AREA";
-                }
-                _iGeoFLayer.DisplayAnnotation = true;
-            }
-            _iGeoFLayer.ShowTips = true;
-        }
-
-        protected void getOracleGeometry(string _dbName, string _colName, string _sdoFunc, string _layerName, IGeoFeatureLayer _iGeoFLayer) {
+        protected void getOracleGeometry(string _dbName, string _colName, string _sdoFunc, string _layerName, IGeoFeatureLayer _iGeoFLayer, IActiveView _aView) {
             string _dbPass;
             if (_colName.Equals("")) {
                 throw new Exception("Geometry column name is not found. \n Check layer geometry type (Multiline, line and polygon");
@@ -104,29 +104,30 @@ namespace SDOGeometryCalc {
                 if (_dbName.Equals("GIS_WORKSPACE")) {
                     _dbPass = "";
                     using (OleDbConnection conn = new OleDbConnection()) {
-                        conn.ConnectionString = "Provider=OraOLEDB.Oracle;Data Source =(DESCRIPTION = (ADDRESS_LIST =(ADDRESS = (PROTOCOL = TCP)(HOST = oradblive)(PORT = 1521)))(CONNECT_DATA = (SERVICE_NAME = live.wairc.govt.nz))); User ID = " + _dbName + "; Password =" + _dbPass + ";Min Pool Size=10;Connection Lifetime=120;Connection Timeout=60;Incr Pool Size=5; Decr Pool Size=2;Max Pool Size=30;Validate Connection = true";
+                        OleDbTransaction transaction = null;
+                        conn.ConnectionString = "Provider=OraOLEDB.Oracle;Data Source =(DESCRIPTION = (ADDRESS_LIST =(ADDRESS = (PROTOCOL = TCP)(HOST = oradbtest)(PORT = 1521)))(CONNECT_DATA = (SERVICE_NAME = test.wairc.govt.nz))); User ID =" + _dbName + "; Password =" + _dbPass + ";Min Pool Size=10;Connection Lifetime=120;Connection Timeout=60;Incr Pool Size=5; Decr Pool Size=2;Max Pool Size=30;Validate Connection = true";
                         using (OleDbCommand command = conn.CreateCommand()) {
-                            command.CommandText = "UPDATE TABLE " + _layerName + " SET " + _colName + "= SDO_GEOM." + _sdoFunc + "(geometry,0.005)";
-                            conn.Open();
-                            command.ExecuteNonQuery();
-                            if (_iGeoFLayer.DisplayAnnotation) {
-                                _iGeoFLayer.DisplayField = _colName;
-                            } else {
-                                _iGeoFLayer.DisplayField = _colName;
-                                _iGeoFLayer.DisplayAnnotation = true;
+                            command.CommandText = "UPDATE " + _layerName + " SET " + _colName + "= SDO_GEOM." + _sdoFunc + "(GEOMETRY,0.005) WHERE GEOMETRY is not null";
+                            try {
+                                conn.Open();
+                                transaction = conn.BeginTransaction();
+                                command.Transaction = transaction;
+                                command.ExecuteNonQuery();
+                                transaction.Commit();
+                                if (_iGeoFLayer.DisplayAnnotation) {
+                                    this.labeling(_iGeoFLayer, "["+_colName+"]", 0, 1000000, false, false, _aView);
+                                } else {
+                                    this.labeling(_iGeoFLayer, "[" + _colName + "]", 0, 1000000, true, true, _aView);
+                                }
+                            
+                            } catch (Exception ex) {
+                                MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK);
+                                try {
+                                    transaction.Rollback();
+                                } catch {
+
+                                }
                             }
-                            _iGeoFLayer.ShowTips = true;
-
-
-                            //command.CommandText = "Select" + colName + " from " + layerName + "_EVW"; // feature name needs to be dynamic
-                            //using (OleDbDataReader reader = command.ExecuteReader()) {
-                            //    List<string> result = new List<string>();
-                            //    while (reader.Read()) {
-                            //        for (int i = 0; i < reader.FieldCount; i++) {
-                            //            result.Add(reader.GetValue(i).ToString());
-                            //        }
-                            //    }
-                            //}
 
                         }
                     }
@@ -135,7 +136,29 @@ namespace SDOGeometryCalc {
                 }
             }
         }
+        public void labeling(IGeoFeatureLayer _iGeoFLayer, string _labelFuc, double _maxScale, double _minScale, bool _showMapTips, bool _displayAnnotation, IActiveView _aView) {
+            RgbColor _labelColor = new RgbColor();
+            _labelColor.RGB = Microsoft.VisualBasic.Information.RGB(0, 0, 0);
+            IAnnotateLayerPropertiesCollection propertiesColl = _iGeoFLayer.AnnotationProperties;
+            IAnnotateLayerProperties labelEngineProperties = new LabelEngineLayerProperties() as IAnnotateLayerProperties;
+            IElementCollection placedElements = new ElementCollection();
+            IElementCollection unplacedElements = new ElementCollection();
+            propertiesColl.QueryItem(0, out labelEngineProperties, out placedElements, out unplacedElements);
+            ILabelEngineLayerProperties lpLabelEngine = labelEngineProperties as ILabelEngineLayerProperties;
+            lpLabelEngine.Expression = _labelFuc;
+            lpLabelEngine.Symbol.Color = _labelColor;
+            labelEngineProperties.AnnotationMaximumScale = _maxScale; // closer
+            labelEngineProperties.AnnotationMinimumScale = _minScale; // further
+            IFeatureLayer thisFeatureLayer = _iGeoFLayer as IFeatureLayer;
+            IDisplayString displayString = thisFeatureLayer as IDisplayString;
+            IDisplayExpressionProperties properties = displayString.ExpressionProperties;
+            properties.Expression = _labelFuc; //example: "[OWNER_NAME] & vbnewline & \"$\" & [TAX_VALUE]";
+            _iGeoFLayer.DisplayAnnotation = _displayAnnotation;
+            _iGeoFLayer.ShowTips = _showMapTips;
 
+            // refresh map window 
+            _aView.Refresh();
+        }
+         
     }
-
 }
