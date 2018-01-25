@@ -17,7 +17,6 @@ namespace SDOGeometryCalc {
 
         public SDOGeomCalc() {
         }
-
         protected override void OnClick() {
             //
             //  TODO: Sample code showing how to access button host
@@ -32,7 +31,7 @@ namespace SDOGeometryCalc {
             IEditor3 editor = (IEditor3)ArcMap.Application.FindExtensionByCLSID(editorUID);
             bool editSession = (editor.EditState == esriEditState.esriStateEditing);
             if (!editSession) {
-                #region getting active layer
+                #region labeling while editing off
                 try {
                     IGeoFeatureLayer iGeoFLayer = this.featureTest(iLayer);
                     IFeatureClass iFclass = iGeoFLayer.FeatureClass;
@@ -51,28 +50,28 @@ namespace SDOGeometryCalc {
                     } else {
                         throw new Exception("Not a supported geometry type.");
                     }
-                    this.getOracleGeometry(dbName, colName, sdoFunc, layerName, iGeoFLayer, aView);
+                    this.getOracleGeometry(dbName, colName, colName, sdoFunc, layerName, iGeoFLayer, aView);
                 } catch (Exception ex) {
                     MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK);
                 }
                 #endregion
 
             } else {
-                #region normal labeling
+                #region labeling during editing
                 IGeoFeatureLayer iGeoFLayer = this.featureTest(iLayer);
                 if (iGeoFLayer != null) {
                     esriGeometryType fGeom = iGeoFLayer.FeatureClass.ShapeType;
                     if (iGeoFLayer.DisplayAnnotation) {
                         if (fGeom == esriGeometryType.esriGeometryLine || fGeom == esriGeometryType.esriGeometryPolyline) {
-                            this.labeling(iGeoFLayer, "[GEOMETRY.LEN]", 0, 1000000, false, false, aView);
+                            this.labeling(iGeoFLayer, "SHAPE_LENGTH", "[GEOMETRY.LEN]",  0, 1000000, false, false, aView);
                         } else {
-                            this.labeling(iGeoFLayer, "[GEOMETRY.AREA]", 0, 1000000, false, false, aView);
+                            this.labeling(iGeoFLayer, "SHAPE_AREA", "[GEOMETRY.AREA]", 0, 1000000, false, false, aView);
                         }
                     } else {
                         if (fGeom == esriGeometryType.esriGeometryLine || fGeom == esriGeometryType.esriGeometryPolyline) {
-                            this.labeling(iGeoFLayer, "[GEOMETRY.LEN]", 0, 1000000, true, true, aView);
+                            this.labeling(iGeoFLayer, "SHAPE_LENGTH", "[GEOMETRY.LEN]", 0, 1000000, true, true, aView);
                         } else {
-                            this.labeling(iGeoFLayer, "[GEOMETRY.AREA]", 0, 1000000, true, true, aView);
+                            this.labeling(iGeoFLayer, "SHAPE_AREA", "[GEOMETRY.AREA]",  0, 1000000, true, true, aView);
                         }
                     }
                 } else {
@@ -96,7 +95,7 @@ namespace SDOGeometryCalc {
             }
         }
 
-        protected void getOracleGeometry(string _dbName, string _colName, string _sdoFunc, string _layerName, IGeoFeatureLayer _iGeoFLayer, IActiveView _aView) {
+        protected void getOracleGeometry(string _dbName, string _colName, string _displayF, string _sdoFunc, string _layerName, IGeoFeatureLayer _iGeoFLayer, IActiveView _aView) {
             string _dbPass;
             if (_colName.Equals("")) {
                 throw new Exception("Geometry column name is not found. \n Check layer geometry type (Multiline, line and polygon");
@@ -115,11 +114,11 @@ namespace SDOGeometryCalc {
                                 command.ExecuteNonQuery();
                                 transaction.Commit();
                                 if (_iGeoFLayer.DisplayAnnotation) {
-                                    this.labeling(_iGeoFLayer, "["+_colName+"]", 0, 1000000, false, false, _aView);
+                                    this.labeling(_iGeoFLayer, "[" + _colName + "]", _displayF, 0, 1000000, false, false, _aView);
                                 } else {
-                                    this.labeling(_iGeoFLayer, "[" + _colName + "]", 0, 1000000, true, true, _aView);
+                                    this.labeling(_iGeoFLayer, "[" + _colName + "]", _displayF, 0, 1000000, true, true, _aView);
                                 }
-                            
+
                             } catch (Exception ex) {
                                 MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK);
                                 try {
@@ -136,7 +135,7 @@ namespace SDOGeometryCalc {
                 }
             }
         }
-        public void labeling(IGeoFeatureLayer _iGeoFLayer, string _labelFuc, double _maxScale, double _minScale, bool _showMapTips, bool _displayAnnotation, IActiveView _aView) {
+        public void labeling(IGeoFeatureLayer _iGeoFLayer, string _labelFuc, string _disField, double _maxScale, double _minScale, bool _showMapTips, bool _displayAnnotation, IActiveView _aView) {
             RgbColor _labelColor = new RgbColor();
             _labelColor.RGB = Microsoft.VisualBasic.Information.RGB(0, 0, 0);
             IAnnotateLayerPropertiesCollection propertiesColl = _iGeoFLayer.AnnotationProperties;
@@ -154,11 +153,12 @@ namespace SDOGeometryCalc {
             IDisplayExpressionProperties properties = displayString.ExpressionProperties;
             properties.Expression = _labelFuc; //example: "[OWNER_NAME] & vbnewline & \"$\" & [TAX_VALUE]";
             _iGeoFLayer.DisplayAnnotation = _displayAnnotation;
+            _iGeoFLayer.DisplayField = _disField;
             _iGeoFLayer.ShowTips = _showMapTips;
 
             // refresh map window 
             _aView.Refresh();
         }
-         
+
     }
 }

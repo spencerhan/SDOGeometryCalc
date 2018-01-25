@@ -1,0 +1,8 @@
+D:\project\arcmap_addin\SDOGeometryCalc\SDOGeometryCalc\bin\Release\SDOGeometryCalc.dll
+D:\project\arcmap_addin\SDOGeometryCalc\SDOGeometryCalc\bin\Release\SDOGeometryCalc.pdb
+D:\project\arcmap_addin\SDOGeometryCalc\SDOGeometryCalc\bin\Release\ESRI.ArcGIS.Editor.dll
+D:\project\arcmap_addin\SDOGeometryCalc\SDOGeometryCalc\bin\Release\ESRI.ArcGIS.Editor.xml
+D:\project\arcmap_addin\SDOGeometryCalc\SDOGeometryCalc\obj\Release\SDOGeometryCalc.csprojResolveAssemblyReference.cache
+D:\project\arcmap_addin\SDOGeometryCalc\SDOGeometryCalc\obj\Release\SDOGeometryCalc.dll
+D:\project\arcmap_addin\SDOGeometryCalc\SDOGeometryCalc\obj\Release\SDOGeometryCalc.pdb
+D:\project\arcmap_addin\SDOGeometryCalc\SDOGeometryCalc\bin\Release\SDOGeometryCalc.esriAddIn
